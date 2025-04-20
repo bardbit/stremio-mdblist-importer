@@ -1,17 +1,19 @@
-// worker.js - Wersja z proxy dla list użytkownika
+// worker.js - Wersja z POPRAWIONYM URL dla list użytkownika
 
 import { addonBuilder } from 'stremio-addon-sdk';
 
 // --- Konfiguracja Addona ---
-// Twój "główny" klucz API - używany do pobierania elementów list wybranych przez użytkownika
-const MDBLIST_MAIN_API_KEY = "w0ys7vrr14k2obu5ar6rsvvq3";
-const MDBLIST_API_URL = "https://api.mdblist.com"; // Bazowy URL API
-const ADDON_ID = "community.mdblist.importer.git.v2"; // Nowe ID dla tej wersji
+const MDBLIST_MAIN_API_KEY = "w0ys7vrr14k2obu5ar6rsvvq3"; // Twój główny klucz API
+// Ten URL jest używany do pobierania *elementów* listy (może być poprawny)
+const MDBLIST_API_ITEMS_URL = "https://api.mdblist.com/lists";
+// !!! TEN URL jest używany do pobierania *list* użytkownika (zgodnie z Twoją informacją)
+const MDBLIST_API_USERLISTS_URL = "https://mdblist.com/api/lists/user/";
+const ADDON_ID = "community.mdblist.importer.git.v3"; // Nowe ID dla tej wersji
 
 // Definicja manifestu - szablon
 const MANIFEST_TEMPLATE = {
   id: ADDON_ID,
-  version: "1.2.0", // Nowa wersja
+  version: "1.2.1", // Zwiększona wersja po poprawce
   name: "MDblist Importer (Dynamic Lists)",
   description: "Importuj wybrane listy z MDblist.com używając swojego klucza API.",
   resources: ["catalog"],
@@ -23,68 +25,80 @@ const MANIFEST_TEMPLATE = {
   // logo: "https://raw.githubusercontent.com/bardbit/stremio-mdblist-importer/main/logo.png"
 };
 
-// --- Logika pobierania DANYCH Z WYBRANYCH LIST (używa GŁÓWNEGO klucza API) ---
-async function fetchListItems(slug, apiKey = MDBLIST_MAIN_API_KEY) { // Domyślnie główny klucz
-  const url = `${MDBLIST_API_URL}/lists/${slug}/items?apiKey=${apiKey}`;
+// --- Logika pobierania DANYCH Z WYBRANYCH LIST (używa GŁÓWNEGO klucza API i MDBLIST_API_ITEMS_URL) ---
+async function fetchListItems(slug, apiKey = MDBLIST_MAIN_API_KEY) {
+  // Używamy URL do pobierania elementów
+  const url = `${MDBLIST_API_ITEMS_URL}/${slug}/items?apiKey=${apiKey}`;
   console.log(`Fetching items for slug: ${slug}`);
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'StremioMDblistAddon/1.2' } });
+    const res = await fetch(url, { headers: { 'User-Agent': 'StremioMDblistAddon/1.2.1' } }); // Zaktualizowany User-Agent
     if (!res.ok) {
-      console.error(`MDblist API error for slug "${slug}": ${res.status} ${res.statusText}`);
+      console.error(`MDblist API error for items slug "${slug}": ${res.status} ${res.statusText}`);
       const errorBody = await res.text().catch(() => 'Could not read error body');
-      console.error(`Error body for ${slug}: ${errorBody}`);
+      console.error(`Error body for items ${slug}: ${errorBody}`);
       return [];
     }
     const contentType = res.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
-         console.error(`Unexpected content-type for slug "${slug}": ${contentType}`);
+         console.error(`Unexpected content-type for items slug "${slug}": ${contentType}`);
          const textBody = await res.text().catch(() => 'Could not read body');
-         console.error(`Body content for ${slug}: ${textBody.substring(0, 200)}...`);
+         console.error(`Body content for items ${slug}: ${textBody.substring(0, 200)}...`);
          return [];
     }
     const data = await res.json();
     return data.items || [];
   } catch (error) {
-    console.error(`Failed to fetch or parse list "${slug}":`, error);
+    console.error(`Failed to fetch or parse items list "${slug}":`, error);
     return [];
   }
 }
 
-// --- Logika pobierania LIST UŻYTKOWNIKA (używa klucza API podanego przez użytkownika) ---
+// --- Logika pobierania LIST UŻYTKOWNIKA (używa klucza API użytkownika i POPRAWIONEGO MDBLIST_API_USERLISTS_URL) ---
 async function fetchUserLists(userApiKey) {
     if (!userApiKey) {
         throw new Error("User API Key is required");
     }
-    // Używamy innego endpointu API MDblist do pobrania list użytkownika
-    const url = `${MDBLIST_API_URL}/lists/user/?apikey=${encodeURIComponent(userApiKey)}`;
-    console.log(`Fetching user lists using provided API key...`);
+    // !!! Używamy POPRAWIONEGO URL do pobierania list użytkownika
+    const url = `${MDBLIST_API_USERLISTS_URL}?apikey=${encodeURIComponent(userApiKey)}`;
+    console.log(`Fetching user lists from: ${url}`); // Logujemy pełny URL (bez klucza) dla pewności
     try {
-        const res = await fetch(url, { headers: { 'User-Agent': 'StremioMDblistAddon/1.2 ConfigProxy' } });
+        const res = await fetch(url, { headers: { 'User-Agent': 'StremioMDblistAddon/1.2.1 ConfigProxy' } });
         if (!res.ok) {
             const errorBody = await res.text().catch(() => `Status: ${res.status} ${res.statusText}`);
             console.error(`MDblist API error fetching user lists: ${res.status} ${res.statusText}`, errorBody);
-            // Rzucamy błąd, aby strona HTML mogła go wyświetlić
-            throw new Error(`Błąd API MDblist (${res.status}): ${errorBody.substring(0,100)}...`);
+            throw new Error(`Błąd API MDblist (${res.status}) podczas pobierania list: ${errorBody.substring(0,100)}...`);
         }
         const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
+         // MDblist czasami zwraca text/html przy błędzie, nawet ze statusem 200 OK
+        if (!contentType || !(contentType.includes("application/json") || contentType.includes("text/javascript")) ) {
             const textBody = await res.text().catch(() => 'Could not read body');
-            console.error(`Unexpected content-type fetching user lists: ${contentType}`, textBody.substring(0,200));
-            throw new Error(`Nieoczekiwana odpowiedź z API MDblist (nie JSON).`);
+            console.error(`Unexpected content-type fetching user lists: ${contentType}. Body: ${textBody.substring(0,200)}...`);
+             // Sprawdź czy treść nie wskazuje na błąd (np. "Invalid API key")
+            if (textBody.toLowerCase().includes("invalid api key") || textBody.toLowerCase().includes("invalid apikey")) {
+                 throw new Error("Nieprawidłowy klucz API MDblist.");
+            } else if (textBody.toLowerCase().includes("no lists found")) {
+                 return []; // Brak list to nie błąd krytyczny
+            }
+            throw new Error(`Nieoczekiwana odpowiedź z API MDblist (oczekiwano JSON, otrzymano ${contentType}).`);
         }
         const data = await res.json();
-        // Sprawdzamy, czy odpowiedź zawiera pole 'lists' lub czy sama jest tablicą
         if (Array.isArray(data.lists)) {
             return data.lists;
         } else if (Array.isArray(data)) {
-            return data; // Czasami API może zwrócić samą tablicę
-        } else {
-             console.error("Invalid format fetching user lists:", data);
+            return data;
+        } else if (data.lists === null && data.count === 0) {
+            return []; // Poprawna odpowiedź oznaczająca brak list
+        }
+         else {
+             console.error("Invalid format fetching user lists:", JSON.stringify(data));
              throw new Error("Nieprawidłowy format odpowiedzi z API MDblist.");
         }
     } catch (error) {
         console.error(`Failed to fetch or parse user lists:`, error);
-        // Rzucamy błąd dalej, aby strona HTML go obsłużyła
+        // Jeśli błąd nie jest już Error, opakuj go
+        if (!(error instanceof Error)) {
+           throw new Error(String(error));
+        }
         throw error;
     }
 }
@@ -99,7 +113,6 @@ async function getCatalog(type, config) {
     if (slugs.length === 0) { return { metas: [] }; }
     console.log(`Fetching items for slugs: ${slugs.join(', ')} and type: ${type}`);
     try {
-        // Pobieramy elementy używając GŁÓWNEGO klucza API zdefiniowanego w workerze
         const promises = slugs.map(slug => fetchListItems(slug, MDBLIST_MAIN_API_KEY));
         const results = await Promise.all(promises);
         const allItems = results.flat();
@@ -138,47 +151,48 @@ export default {
     async fetch(request) {
         const url = new URL(request.url);
         const { pathname, searchParams } = url;
-
-        // Zawsze dodawaj nagłówki CORS
         const corsHeaders = {
-            'Access-Control-Allow-Origin': '*', // Można zawęzić w przyszłości
-            'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS', // Dodano POST dla proxy
-            'Access-Control-Allow-Headers': '*', // Lub zawęzić do 'Content-Type' itp.
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers': '*',
         };
 
-        // Obsługa preflight CORS
         if (request.method === 'OPTIONS') {
             return new Response(null, { headers: corsHeaders });
         }
 
-        // Strona główna
         if (pathname === "/") {
             return new Response(landingHTML, {
                 headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
             });
         }
 
-        // *** NOWY ENDPOINT: Proxy do pobierania list użytkownika ***
+        // Proxy do pobierania list użytkownika
         if (pathname === '/api/get-user-lists' && request.method === 'POST') {
             try {
                 const body = await request.json();
                 const userApiKey = body.apiKey;
                 if (!userApiKey) {
-                   return new Response(JSON.stringify({ error: "Missing apiKey in request body" }), {
+                   return new Response(JSON.stringify({ error: "Brak klucza apiKey w zapytaniu" }), {
                        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                    });
                 }
-                // Wywołaj funkcję pobierającą listy z kluczem użytkownika
                 const lists = await fetchUserLists(userApiKey);
-                // Zwróć listy do strony HTML
                 return new Response(JSON.stringify({ lists: lists }), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             } catch (err) {
                 console.error("Error in /api/get-user-lists proxy:", err);
-                // Zwróć błąd w formacie JSON, aby strona HTML mogła go wyświetlić
-                return new Response(JSON.stringify({ error: err.message || "Błąd podczas pobierania list użytkownika." }), {
-                    status: err.message.includes("API MDblist") ? 400 : 500, // Zwróć 400 dla błędów API, 500 dla innych
+                // Upewnij się, że err.message istnieje
+                const errorMessage = (err instanceof Error && err.message) ? err.message : "Nieznany błąd podczas pobierania list użytkownika.";
+                 // Ustal status błędu na podstawie komunikatu
+                let status = 500;
+                if (errorMessage.includes("API MDblist") || errorMessage.includes("Nieprawidłowy klucz API")) {
+                   status = 400; // Błąd użytkownika (zły klucz) lub błąd API MDblist
+                }
+
+                return new Response(JSON.stringify({ error: errorMessage }), {
+                    status: status,
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                 });
             }
@@ -211,7 +225,6 @@ export default {
                 });
             }
             try {
-                // Zwróć uwagę: getCatalog używa GŁÓWNEGO klucza API, nie użytkownika
                 const result = await getCatalog(type, config);
                 return new Response(JSON.stringify(result), {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
