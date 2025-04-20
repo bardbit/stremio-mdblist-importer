@@ -12,16 +12,18 @@
     button { padding: .5rem 1rem; font-size: 1rem; margin-top: .5rem; }
     #lists { margin: 1rem 0; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: .5rem; }
     #lists label { display: inline; margin-left: .25rem; }
+    #error { color: #c00; margin-top: 1rem; white-space: pre-wrap; font-family: monospace; }
   </style>
 </head>
 <body>
   <h1>MDblist Config</h1>
 
   <label for="apiKey">API Key:</label>
-  <input id="apiKey" type="text" placeholder="w0ys7vrr14k2obu5ar6rsvvq3" style="width:100%">
+  <input id="apiKey" type="text" placeholder="Twój API Key" style="width:100%">
 
   <button onclick="loadLists()">Load lists</button>
 
+  <div id="error"></div>
   <div id="lists"></div>
 
   <label for="slugs">Selected list slugs:</label>
@@ -29,37 +31,48 @@
 
   <script>
     async function loadLists() {
+      clearUI();
       const apiKey = document.getElementById('apiKey').value.trim();
       if (!apiKey) {
-        alert('Wpisz API Key');
+        showError('Brak API Key! Wpisz swój klucz.');
         return;
       }
       const url = `https://api.mdblist.com/api/lists/user?apiKey=${apiKey}`;
       try {
         const res = await fetch(url);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) {
+          const text = await res.text().catch(() => '<brak treści odpowiedzi>');
+          throw new Error(`HTTP ${res.status} ${res.statusText}\nURL: ${url}\nResponse: ${text}`);
+        }
         const data = await res.json();
         const lists = data.lists || data;
-        const container = document.getElementById('lists');
-        container.innerHTML = '';
-        lists.forEach(list => {
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.value = list.slug;
-          cb.id = 'cb_' + list.slug;
-          cb.addEventListener('change', updateSlugs);
-          const lbl = document.createElement('label');
-          lbl.htmlFor = cb.id;
-          lbl.textContent = `${list.title} (${list.slug})`;
-          container.appendChild(cb);
-          container.appendChild(lbl);
-          container.appendChild(document.createElement('br'));
-        });
-        updateSlugs();
+        if (!Array.isArray(lists)) {
+          throw new Error(`Nieoczekiwany format danych:\n${JSON.stringify(data)}`);
+        }
+        renderLists(lists);
       } catch (e) {
-        alert('Błąd pobierania list: ' + e.message);
-        console.error(e);
+        console.error('Błąd fetch:', e);
+        showError('Błąd pobierania listy:\n' + e.message);
       }
+    }
+
+    function renderLists(lists) {
+      const container = document.getElementById('lists');
+      container.innerHTML = '';
+      lists.forEach(list => {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = list.slug;
+        cb.id = 'cb_' + list.slug;
+        cb.addEventListener('change', updateSlugs);
+        const lbl = document.createElement('label');
+        lbl.htmlFor = cb.id;
+        lbl.textContent = `${list.title} (${list.slug})`;
+        container.appendChild(cb);
+        container.appendChild(lbl);
+        container.appendChild(document.createElement('br'));
+      });
+      updateSlugs();
     }
 
     function updateSlugs() {
@@ -67,6 +80,17 @@
         .map(cb => cb.value)
         .join(',');
       document.getElementById('slugs').value = slugs;
+    }
+
+    function showError(msg) {
+      const errDiv = document.getElementById('error');
+      errDiv.textContent = msg;
+    }
+
+    function clearUI() {
+      document.getElementById('error').textContent = '';
+      document.getElementById('lists').innerHTML = '';
+      document.getElementById('slugs').value = '';
     }
   </script>
 </body>
