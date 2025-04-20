@@ -1,4 +1,4 @@
-// worker.js - Wersja z uproszczonym routingiem i globalnym try...catch
+// worker.js - Wersja z debugowaniem ścieżki w odpowiedzi 404
 
 import { addonBuilder } from 'stremio-addon-sdk';
 
@@ -6,7 +6,7 @@ import { addonBuilder } from 'stremio-addon-sdk';
 const MDBLIST_MAIN_API_KEY = "w0ys7vrr14k2obu5ar6rsvvq3";
 const MDBLIST_API_ITEMS_URL = "https://api.mdblist.com/lists";
 const MDBLIST_API_USERLISTS_URL = "https://mdblist.com/api/lists/user/";
-const ADDON_ID = "community.mdblist.importer.git.v3"; // Używamy tego samego ID na razie
+const ADDON_ID = "community.mdblist.importer.git.v3";
 
 // Definicja manifestu - szablon
 const MANIFEST_TEMPLATE = {
@@ -22,31 +22,26 @@ const MANIFEST_TEMPLATE = {
 // --- Logika pobierania DANYCH Z WYBRANYCH LIST ---
 async function fetchListItems(slug, apiKey = MDBLIST_MAIN_API_KEY) {
   const url = `${MDBLIST_API_ITEMS_URL}/${slug}/items?apiKey=${apiKey}`;
-  console.log(`Fetching items for slug: ${slug}`); // Ten log nie będzie widoczny bez dostępu do logów
+  // console.log(`Fetching items for slug: ${slug}`); // Logi niedostępne
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'StremioMDblistAddon/1.2.1' } });
-    if (!res.ok) { throw new Error(`API Error ${res.status}`); } // Uproszczony błąd
+    if (!res.ok) { throw new Error(`API Error ${res.status}`); }
     const data = await res.json();
     return data.items || [];
   } catch (error) {
-    console.error(`Failed to fetch or parse items list "${slug}":`, error);
+    console.error(`Failed to fetch or parse items list "${slug}":`, error); // Logi niedostępne
     return [];
   }
 }
 
-// --- Logika pobierania LIST UŻYTKOWNIKA (nieużywana w tej wersji) ---
-// async function fetchUserLists(userApiKey) { ... } // Zakomentowane na razie
-
-
 // --- Logika katalogu ---
 async function getCatalog(type, config) {
-    // ... (reszta logiki katalogu bez zmian) ...
     const listSlugsString = config.listSlug;
-    console.log(`Catalog request: type=${type}, config=`, JSON.stringify(config));
+    // console.log(`Catalog request: type=${type}, config=`, JSON.stringify(config));
     if (!listSlugsString) { return { metas: [] }; }
     const slugs = [...new Set(listSlugsString.split(',').map(s => s.trim()).filter(s => s))];
     if (slugs.length === 0) { return { metas: [] }; }
-    console.log(`Fetching items for slugs: ${slugs.join(', ')} and type: ${type}`);
+    // console.log(`Fetching items for slugs: ${slugs.join(', ')} and type: ${type}`);
     try {
         const promises = slugs.map(slug => fetchListItems(slug, MDBLIST_MAIN_API_KEY));
         const results = await Promise.all(promises);
@@ -66,20 +61,19 @@ async function getCatalog(type, config) {
             }
         });
         const metas = Array.from(uniqueMetas.values());
-        console.log(`Returning ${metas.length} unique metas for type ${type} from slugs [${slugs.join(', ')}]`);
+        // console.log(`Returning ${metas.length} unique metas for type ${type} from slugs [${slugs.join(', ')}]`);
         return { metas };
     } catch (error) {
-        console.error("Error processing catalog request:", error);
+        console.error("Error processing catalog request:", error); // Logi niedostępne
         return { metas: [] };
     }
 }
 
 // --- Obsługa żądań w Cloudflare Worker ---
-const landingHTML = `<!DOCTYPE html><html><head><title>MDblist Addon</title><style>body{font-family: sans-serif; padding: 2em; background: #222; color: #eee;}</style></head><body><h1>MDblist Importer (Test Version)</h1><p>Worker działa. Ścieżka /manifest.json powinna zwracać JSON.</p></body></html>`;
+const landingHTML = `<!DOCTYPE html><html><head><title>MDblist Addon</title><style>body{font-family: sans-serif; padding: 2em; background: #222; color: #eee;}</style></head><body><h1>MDblist Importer (Debug v4)</h1><p>Worker test page.</p></body></html>`;
 
 export default {
     async fetch(request) {
-        // === Globalny try...catch ===
         try {
             const url = new URL(request.url);
             const { pathname, searchParams } = url;
@@ -95,17 +89,15 @@ export default {
 
             // Strona główna
             if (pathname === "/") {
-                // Używamy prostszego tworzenia odpowiedzi, na wszelki wypadek
                 return new Response(landingHTML, {
                     status: 200,
                     headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' },
                 });
             }
 
-            // Endpoint API - Tymczasowo wyłączony
+            // Endpoint API - Nadal wyłączony dla testów
             /*
             if (pathname === '/api/get-user-lists' && request.method === 'POST') {
-                // ... logika proxy (zakomentowana) ...
                  return new Response(JSON.stringify({ error: "Endpoint disabled for testing" }), {
                      status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                  });
@@ -143,26 +135,77 @@ export default {
                     return new Response(JSON.stringify(result), {
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
-                } catch (err) { // Łapanie błędów specyficznie z getCatalog
-                    console.error("Error generating catalog:", err); // Ten log nie będzie widoczny
+                } catch (err) {
+                    console.error("Error generating catalog:", err);
                     return new Response(JSON.stringify({ error: "Internal Server Error generating catalog", details: err.message }), {
                         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     });
                 }
             }
 
-            // Nie znaleziono - Zwracamy 404
-            return new Response('Not Found: '+pathname, {
-                status: 404, headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
+            // *** ZMIENIONY BLOK "Not Found" ***
+            // Jeśli żadna ze ścieżek nie pasuje, zwróć informację o otrzymanej ścieżce
+            return new Response(`Worker received unhandled path: '${pathname}'\nFull URL: ${request.url}`, {
+                status: 404, // Nadal zwracamy 404
+                headers: { ...corsHeaders, 'Content-Type': 'text/plain' }
             });
 
-        } catch (err) { // === Globalny catch ===
-            console.error("!!! Global Worker Error !!!:", err); // Ten log nie będzie widoczny
-            // Spróbuj zwrócić błąd jako zwykły tekst
+        } catch (err) { // Globalny catch
+            console.error("!!! Global Worker Error !!!:", err);
             return new Response(`Worker Error:\n${err}\n${err.stack}`, {
                 status: 500,
-                headers: { 'Content-Type': 'text/plain' } // Używamy text/plain
+                headers: { 'Content-Type': 'text/plain' }
             });
         }
     }
 };
+
+// Dodajemy funkcje pomocnicze na koniec, aby uniknąć błędów hoistingu w niektórych środowiskach
+// (chociaż w module ES powinno to działać, ale dla pewności)
+async function fetchListItems(slug, apiKey = MDBLIST_MAIN_API_KEY) {
+  const url = `${MDBLIST_API_ITEMS_URL}/${slug}/items?apiKey=${apiKey}`;
+  // console.log(`Fetching items for slug: ${slug}`);
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'StremioMDblistAddon/1.2.1' } });
+    if (!res.ok) { throw new Error(`API Error ${res.status}`); }
+    const data = await res.json();
+    return data.items || [];
+  } catch (error) {
+    console.error(`Failed to fetch or parse items list "${slug}":`, error);
+    return [];
+  }
+}
+
+async function getCatalog(type, config) {
+    const listSlugsString = config.listSlug;
+    // console.log(`Catalog request: type=${type}, config=`, JSON.stringify(config));
+    if (!listSlugsString) { return { metas: [] }; }
+    const slugs = [...new Set(listSlugsString.split(',').map(s => s.trim()).filter(s => s))];
+    if (slugs.length === 0) { return { metas: [] }; }
+    // console.log(`Fetching items for slugs: ${slugs.join(', ')} and type: ${type}`);
+    try {
+        const promises = slugs.map(slug => fetchListItems(slug, MDBLIST_MAIN_API_KEY));
+        const results = await Promise.all(promises);
+        const allItems = results.flat();
+        const uniqueMetas = new Map();
+        allItems
+        .filter(item => item && item.type === type && item.tmdbId)
+        .forEach(item => {
+            const itemId = item.tmdbId.toString();
+            if (!uniqueMetas.has(itemId)) {
+            let posterUrl = item.poster;
+            if (posterUrl && posterUrl.startsWith('//')) { posterUrl = 'https:' + posterUrl; }
+            uniqueMetas.set(itemId, {
+                id: `tmdb:${itemId}`, type: type, name: item.title || `Untitled TMDB ${itemId}`,
+                poster: posterUrl, releaseInfo: item.year ? item.year.toString() : undefined,
+            });
+            }
+        });
+        const metas = Array.from(uniqueMetas.values());
+        // console.log(`Returning ${metas.length} unique metas for type ${type} from slugs [${slugs.join(', ')}]`);
+        return { metas };
+    } catch (error) {
+        console.error("Error processing catalog request:", error);
+        return { metas: [] };
+    }
+}
