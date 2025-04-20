@@ -9,11 +9,11 @@
     h1 { text-align: center; }
     label { display: block; margin: 1rem 0 .5rem; }
     input[type="text"] { width:100%; padding:.5rem; font-size:1rem; background:#222; color:#eee; border:1px solid #444; }
-    button, a.install-btn { display: inline-block; margin-top:.5rem; padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; text-decoration:none; text-align:center; cursor:pointer; }
+    button, a.button { display: inline-block; padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; cursor:pointer; text-decoration:none; margin-top:.5rem; }
+    button:hover, a.button:hover { background:#005bb5; }
     #lists { margin:1rem 0; max-height:300px; overflow-y:auto; border:1px solid #444; padding:.5rem; background:#222; }
     #lists label { margin-left:.25rem; }
     #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; }
-    #install-section { margin-top:2rem; text-align:center; }
   </style>
 </head>
 <body>
@@ -25,7 +25,7 @@
     });
   </script>
 
-  <h1>MDblist Config i Instalacja</h1>
+  <h1>MDblist Config & Install</h1>
 
   <label for="apiKey">Twoje API Key:</label>
   <input id="apiKey" type="text" placeholder="w0ys7vrr14k2obu5ar6rsvvq3">
@@ -33,23 +33,15 @@
   <button onclick="loadLists()">Załaduj listy</button>
 
   <div id="error-message" style="display:none;"></div>
-
   <div id="lists"></div>
 
-  <label for="slugs">Wybrane slugi (skopiuj do Stremio):</label>
+  <label for="slugs">Wybrane slugi (skopiuj/zaimplementuj):</label>
   <input id="slugs" type="text" placeholder="slug1,slug2,..." readonly>
 
-  <div id="install-section">
-    <p>Gdy masz już slug-i, możesz zainstalować add‑on:</p>
-    <a id="installBtn" class="install-btn" href="#" target="_blank">Zainstaluj do Stremio</a>
-  </div>
+  <!-- Przycisk instalacji -->
+  <a id="installBtn" class="button" href="#" target="_blank" style="display:none;">Zainstaluj do Stremio</a>
 
   <script>
-    // Adres manifestu dla Stremio
-    const manifestUrl = 'https://raw.githack.com/bardbit/stremio-mdblist-importer/main/manifest.json';
-    // Aktualizacja href dla przycisku instalacji
-    document.getElementById('installBtn').href = 'stremio://' + manifestUrl;
-
     async function loadLists() {
       const apiKey = document.getElementById('apiKey').value.trim();
       const errorDiv = document.getElementById('error-message');
@@ -58,6 +50,7 @@
       errorDiv.style.display = 'none';
       errorDiv.textContent = '';
       listContainer.innerHTML = '';
+      toggleInstall(false);
 
       if (!apiKey) {
         showError('Nie wpisałeś API Key');
@@ -65,30 +58,28 @@
       }
 
       const url = `https://mdblist.com/api/lists/user/?apikey=${encodeURIComponent(apiKey)}`;
-
       try {
         const res = await fetch(url);
-        let bodyText;
-        try { bodyText = await res.text(); } catch(_) { bodyText = '<brak treści>'; }
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status} ${res.statusText}\n${bodyText}`);
-        }
+        let bodyText = '<brak treści>';
+        try { bodyText = await res.text(); } catch(_){}
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}\n${bodyText}`);
+
         let data;
-        try {
-          data = JSON.parse(bodyText);
-        } catch (e) {
+        try { data = JSON.parse(bodyText); } catch (e) {
           throw new Error(`Błąd parsowania JSON:\n${e.message}\nDane:\n${bodyText}`);
         }
+
         const lists = data.lists || data;
         if (!Array.isArray(lists) || !lists.length) {
           throw new Error('Brak list do wyświetlenia lub niepoprawny format odpowiedzi');
         }
+
         lists.forEach(({ title, slug }) => {
           const cb = document.createElement('input');
           cb.type = 'checkbox';
           cb.value = slug;
           cb.id = 'cb_' + slug;
-          cb.addEventListener('change', updateSlugs);
+          cb.addEventListener('change', () => { updateSlugs(); updateInstallLink(); });
           const lbl = document.createElement('label');
           lbl.htmlFor = cb.id;
           lbl.textContent = `${title} (${slug})`;
@@ -96,7 +87,11 @@
           listContainer.appendChild(lbl);
           listContainer.appendChild(document.createElement('br'));
         });
+
         updateSlugs();
+        updateInstallLink();
+        toggleInstall(true);
+
       } catch (e) {
         const msg = e.message.includes('Failed to fetch')
           ? `${e.message}\n\nMoże to być błąd CORS lub brak dostępu do API z tej domeny.`
@@ -116,6 +111,17 @@
         .map(cb => cb.value)
         .join(',');
       document.getElementById('slugs').value = selected;
+    }
+
+    function updateInstallLink() {
+      const slugs = document.getElementById('slugs').value;
+      const base = 'cdn.jsdelivr.net/gh/bardbit/stremio-mdblist-importer@main/manifest.json';
+      const href = 'stremio://' + base + (slugs ? `?listSlug=${encodeURIComponent(slugs)}` : '');
+      document.getElementById('installBtn').href = href;
+    }
+
+    function toggleInstall(show) {
+      document.getElementById('installBtn').style.display = show ? 'inline-block' : 'none';
     }
   </script>
 </body>
