@@ -61,9 +61,10 @@
   </div>
 
   <script>
-    // !!! WAŻNE: UPEWNIJ SIĘ, ŻE TEN ADRES URL JEST POPRAWNYM ADRESEM TWOJEGO WORKERA (.pages.dev) !!!
-    const WORKER_URL = 'stremio-mdblist-importer.pages.dev'; // <<<================== ZMIEŃ NA SWÓJ ADRES .pages.dev!
+    // === TUTAJ JEST TWÓJ POPRAWNY ADRES URL WORKERA ===
+    const WORKER_URL = 'https://stremio-mdblist-importer.pages.dev'; // Adres URL Twojego wdrożenia
 
+    // === Reszta kodu JavaScript bez zmian ===
     const apiKeyInput = document.getElementById('apiKeyInput');
     const loadListsBtn = document.getElementById('loadListsBtn');
     const listsDiv = document.getElementById('lists');
@@ -99,9 +100,9 @@
             return;
         }
 
-        // Sprawdzenie WORKER_URL
-        if (!WORKER_URL || WORKER_URL === 'stremio-mdblist-importer.pages.dev') {
-            showMessage('error', 'BŁĄD KRYTYCZNY: Adres URL workera (WORKER_URL) nie jest ustawiony poprawnie w kodzie HTML!');
+        // Sprawdzenie WORKER_URL - teraz używamy poprawnego adresu, więc ten warunek jest głównie dla bezpieczeństwa
+        if (!WORKER_URL || WORKER_URL === 'https://NAZWA-PROJEKTU.pages.dev') { // Ten warunek nie powinien być już spełniony
+            showMessage('error', 'BŁĄD WEWNĘTRZNY: Adres URL workera nie jest poprawnie ustawiony.');
             return;
         }
 
@@ -118,13 +119,12 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ apiKey: apiKey }) // Wysyłamy klucz w ciele POST
+                body: JSON.stringify({ apiKey: apiKey })
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                // Wyświetl błąd zwrócony przez worker (np. błąd API MDblist)
                 throw new Error(data.error || `Błąd serwera (${response.status})`);
             }
 
@@ -134,7 +134,6 @@
                 return;
             }
 
-            // Wypełnij div checkboxami
             lists.forEach(list => {
                 const div = document.createElement('div');
                 const checkbox = document.createElement('input');
@@ -145,25 +144,22 @@
 
                 const label = document.createElement('label');
                 label.htmlFor = checkbox.id;
-                // label.textContent = `${list.title} (${list.slug}) - ${list.item_count || 0} pozycji`;
-                 label.textContent = `${list.name || list.title} (${list.slug}) - ${list.item_count !== undefined ? list.item_count : '?'} pozycji`;
-
+                label.textContent = `${list.name || list.title} (${list.slug}) - ${list.item_count !== undefined ? list.item_count : '?'} pozycji`;
 
                 div.appendChild(checkbox);
                 div.appendChild(label);
                 listsDiv.appendChild(div);
             });
 
-            listsContainer.style.display = 'block'; // Pokaż sekcję z listami
+            listsContainer.style.display = 'block';
             showMessage('info', `Załadowano ${lists.length} list. Wybierz, które chcesz zaimportować.`);
 
         } catch (error) {
             console.error("Błąd podczas ładowania list:", error);
             showMessage('error', `Nie udało się załadować list: ${error.message}\n\nSprawdź swój klucz API oraz połączenie internetowe. Upewnij się, że worker (${WORKER_URL}) działa poprawnie.`);
         } finally {
-             loadListsBtn.disabled = false; // Włącz przycisk z powrotem
+             loadListsBtn.disabled = false;
              apiKeyInput.disabled = false;
-             // Ukryj komunikat ładowania, jeśli nie było innego komunikatu
              if (loadingMsgDiv.style.display === 'block' && errorMsgDiv.style.display === 'none' && infoMsgDiv.style.display === 'none') {
                  loadingMsgDiv.style.display = 'none';
              }
@@ -180,7 +176,6 @@
             return;
         }
 
-        // Ukryj poprzednie komunikaty o błędach/info
         showMessage('', ''); // Wyczyść komunikaty
 
         const encodedSlugs = encodeURIComponent(selectedSlugs.join(','));
@@ -188,7 +183,7 @@
 
         installBtn.href = installHref;
         installUrlDisplay.textContent = installHref;
-        installContainer.style.display = 'block'; // Pokaż sekcję z linkiem instalacyjnym
+        installContainer.style.display = 'block';
     }
 
   </script>
