@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MDblist Config UI</title>
+  <title>MDblist Config & Install</title>
   <style>
     body { color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; transition: background 0.5s ease; }
     h1 { text-align: center; }
     label { display: block; margin: 1rem 0 .5rem; }
     input[type="text"] { width:100%; padding:.5rem; font-size:1rem; background:#222; color:#eee; border:1px solid #444; }
-    button { padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; cursor:pointer; }
+    button, a.install-btn { display: inline-block; margin-top:.5rem; padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; text-decoration:none; text-align:center; cursor:pointer; }
     #lists { margin:1rem 0; max-height:300px; overflow-y:auto; border:1px solid #444; padding:.5rem; background:#222; }
     #lists label { margin-left:.25rem; }
     #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; }
+    #install-section { margin-top:2rem; text-align:center; }
   </style>
 </head>
 <body>
@@ -24,7 +25,7 @@
     });
   </script>
 
-  <h1>MDblist Config UI</h1>
+  <h1>MDblist Config i Instalacja</h1>
 
   <label for="apiKey">Twoje API Key:</label>
   <input id="apiKey" type="text" placeholder="w0ys7vrr14k2obu5ar6rsvvq3">
@@ -38,7 +39,17 @@
   <label for="slugs">Wybrane slugi (skopiuj do Stremio):</label>
   <input id="slugs" type="text" placeholder="slug1,slug2,..." readonly>
 
+  <div id="install-section">
+    <p>Gdy masz już slug-i, możesz zainstalować add‑on:</p>
+    <a id="installBtn" class="install-btn" href="#" target="_blank">Zainstaluj do Stremio</a>
+  </div>
+
   <script>
+    // Adres manifestu dla Stremio
+    const manifestUrl = 'https://raw.githack.com/bardbit/stremio-mdblist-importer/main/manifest.json';
+    // Aktualizacja href dla przycisku instalacji
+    document.getElementById('installBtn').href = 'stremio://' + manifestUrl;
+
     async function loadLists() {
       const apiKey = document.getElementById('apiKey').value.trim();
       const errorDiv = document.getElementById('error-message');
@@ -53,7 +64,6 @@
         return;
       }
 
-      // Zmieniony endpoint:
       const url = `https://mdblist.com/api/lists/user/?apikey=${encodeURIComponent(apiKey)}`;
 
       try {
@@ -73,7 +83,6 @@
         if (!Array.isArray(lists) || !lists.length) {
           throw new Error('Brak list do wyświetlenia lub niepoprawny format odpowiedzi');
         }
-        // render checkboxy
         lists.forEach(({ title, slug }) => {
           const cb = document.createElement('input');
           cb.type = 'checkbox';
