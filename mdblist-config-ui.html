@@ -2,95 +2,103 @@
 <html lang="pl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MDblist Config UI</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+    body { background: #111; color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
     h1 { text-align: center; }
-    label { display: block; margin: .5rem 0; }
-    input[type="text"] { padding: .5rem; font-size: 1rem; }
-    button { padding: .5rem 1rem; font-size: 1rem; margin-top: .5rem; }
-    #lists { margin: 1rem 0; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: .5rem; }
-    #lists label { display: inline; margin-left: .25rem; }
-    #error { color: #c00; margin-top: 1rem; white-space: pre-wrap; font-family: monospace; }
+    label { display: block; margin: 1rem 0 .5rem; }
+    input[type="text"] { width:100%; padding:.5rem; font-size:1rem; background:#222; color:#eee; border:1px solid #444; }
+    button { padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; cursor:pointer; }
+    #lists { margin:1rem 0; max-height:300px; overflow-y:auto; border:1px solid #444; padding:.5rem; background:#222; }
+    #lists label { margin-left:.25rem; }
+    #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; }
   </style>
 </head>
 <body>
-  <h1>MDblist Config</h1>
+  <h1>MDblist Config UI</h1>
 
-  <label for="apiKey">API Key:</label>
-  <input id="apiKey" type="text" placeholder="Twój API Key" style="width:100%">
+  <label for="apiKey">Twoje API Key:</label>
+  <input id="apiKey" type="text" placeholder="w0ys7vrr14k2obu5ar6rsvvq3">
 
-  <button onclick="loadLists()">Load lists</button>
+  <button onclick="loadLists()">Załaduj listy</button>
 
-  <div id="error"></div>
+  <div id="error-message" style="display:none;"></div>
+
   <div id="lists"></div>
 
-  <label for="slugs">Selected list slugs:</label>
-  <input id="slugs" type="text" style="width:100%" placeholder="slug1,slug2,...">
+  <label for="slugs">Wybrane slugi (skopiuj do Stremio):</label>
+  <input id="slugs" type="text" placeholder="slug1,slug2,..." readonly>
 
   <script>
     async function loadLists() {
-      clearUI();
       const apiKey = document.getElementById('apiKey').value.trim();
+      const errorDiv = document.getElementById('error-message');
+      const listContainer = document.getElementById('lists');
+      document.getElementById('slugs').value = '';
+      errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
+      listContainer.innerHTML = '';
+
       if (!apiKey) {
-        showError('Brak API Key! Wpisz swój klucz.');
+        showError('Nie wpisałeś API Key');
         return;
       }
-      const url = `https://api.mdblist.com/api/lists/user?apiKey=${apiKey}`;
+
+      const url = `https://api.mdblist.com/api/lists/user?apiKey=${encodeURIComponent(apiKey)}`;
+
       try {
         const res = await fetch(url);
+        let bodyText;
+        try { bodyText = await res.text(); } catch(_){ bodyText = '<brak treści>'; }
         if (!res.ok) {
-          const text = await res.text().catch(() => '<brak treści odpowiedzi>');
-          throw new Error(`HTTP ${res.status} ${res.statusText}\nURL: ${url}\nResponse: ${text}`);
+          throw new Error(`HTTP ${res.status} ${res.statusText}\n${bodyText}`);
         }
-        const data = await res.json();
+        let data;
+        try {
+          data = JSON.parse(bodyText);
+        } catch (e) {
+          throw new Error(`Błąd parsowania JSON:\n${e.message}\nDane:\n${bodyText}`);
+        }
         const lists = data.lists || data;
-        if (!Array.isArray(lists)) {
-          throw new Error(`Nieoczekiwany format danych:\n${JSON.stringify(data)}`);
+        if (!Array.isArray(lists) || !lists.length) {
+          throw new Error('Brak list do wyświetlenia lub niepoprawny format odpowiedzi');
         }
-        renderLists(lists);
+        // render checkboxy
+        lists.forEach(({ title, slug }) => {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = slug;
+          cb.id = 'cb_' + slug;
+          cb.addEventListener('change', updateSlugs);
+          const lbl = document.createElement('label');
+          lbl.htmlFor = cb.id;
+          lbl.textContent = `${title} (${slug})`;
+          listContainer.appendChild(cb);
+          listContainer.appendChild(lbl);
+          listContainer.appendChild(document.createElement('br'));
+        });
+        updateSlugs();
       } catch (e) {
-        console.error('Błąd fetch:', e);
-        showError('Błąd pobierania listy:\n' + e.message);
+        // rozpoznanie CORS/Network
+        const msg = e.message.includes('Failed to fetch')
+          ? `${e.message}\n\nMoże to być błąd CORS lub brak dostępu do API z tej domeny.`
+          : e.message;
+        showError(`Błąd pobierania list:\nURL: ${url}\n\n${msg}`);
       }
     }
 
-    function renderLists(lists) {
-      const container = document.getElementById('lists');
-      container.innerHTML = '';
-      lists.forEach(list => {
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = list.slug;
-        cb.id = 'cb_' + list.slug;
-        cb.addEventListener('change', updateSlugs);
-        const lbl = document.createElement('label');
-        lbl.htmlFor = cb.id;
-        lbl.textContent = `${list.title} (${list.slug})`;
-        container.appendChild(cb);
-        container.appendChild(lbl);
-        container.appendChild(document.createElement('br'));
-      });
-      updateSlugs();
+    function showError(text) {
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.textContent = text;
+      errorDiv.style.display = 'block';
     }
 
     function updateSlugs() {
-      const slugs = Array.from(document.querySelectorAll('#lists input[type=checkbox]:checked'))
+      const selected = Array.from(document.querySelectorAll('#lists input[type=checkbox]:checked'))
         .map(cb => cb.value)
         .join(',');
-      document.getElementById('slugs').value = slugs;
-    }
-
-    function showError(msg) {
-      const errDiv = document.getElementById('error');
-      errDiv.textContent = msg;
-    }
-
-    function clearUI() {
-      document.getElementById('error').textContent = '';
-      document.getElementById('lists').innerHTML = '';
-      document.getElementById('slugs').value = '';
+      document.getElementById('slugs').value = selected;
     }
   </script>
 </body>
