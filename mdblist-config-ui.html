@@ -3,35 +3,55 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MDblist Importer - Konfiguracja (Git Deploy)</title> <!-- Zmieniony tytuł -->
+  <title>MDblist Importer - Konfiguracja Dynamiczna</title>
   <style>
     body { color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; background: #333; }
     h1 { text-align: center; }
     label { display: block; margin: 1rem 0 .5rem; font-weight: bold; }
-    textarea { width: 100%; min-height: 80px; padding: .5rem; font-size: 1rem; background: #222; color: #eee; border: 1px solid #444; box-sizing: border-box; font-family: monospace; }
-    button, a.button { display: inline-block; padding: .7rem 1.2rem; font-size: 1rem; background: #0066cc; color: #fff; border: none; cursor: pointer; text-decoration: none; margin-top: 1rem; border-radius: 4px; }
+    input[type="text"], input[type="password"], textarea { width: 100%; padding: .5rem; font-size: 1rem; background: #222; color: #eee; border: 1px solid #444; box-sizing: border-box; }
+    button, a.button { display: inline-block; padding: .7rem 1.2rem; font-size: 1rem; background: #0066cc; color: #fff; border: none; cursor: pointer; text-decoration: none; margin-top: 1rem; border-radius: 4px; margin-right: 0.5rem; }
     button:hover, a.button:hover { background: #005bb5; }
-    #install-link-container { margin-top: 1.5rem; }
-    #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; display: none; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    #install-link-container, #lists-container { margin-top: 1.5rem; }
+    #lists { max-height: 300px; overflow-y: auto; border: 1px solid #444; padding: 1rem; background: #2a2a2a; margin-top: 0.5rem; }
+    #lists label { margin-left: 0.5rem; font-weight: normal; }
+    #lists input[type="checkbox"] { vertical-align: middle; }
+    #lists div { margin-bottom: 0.5rem; } /* Odstęp między checkboxami */
+    .error-message, .info-message, .loading-message { padding: 1rem; margin: 1rem 0; border: 1px solid; white-space: pre-wrap; }
+    .error-message { background:#330000; color:#f88; border-color: #f44; display: none; }
+    .info-message { background:#003300; color:#8f8; border-color: #4f4; display: none; }
+    .loading-message { background:#003366; color:#8af; border-color: #4af; display: none; }
     #info { background: #222; border: 1px solid #444; padding: 1rem; margin-top: 1rem; font-size: 0.9em; }
     code { background: #444; padding: 0.2em 0.4em; border-radius: 3px; }
   </style>
 </head>
 <body>
 
-  <h1>Konfiguracja Addona MDblist Importer (Git Deploy)</h1> <!-- Zmieniony tytuł -->
+  <h1>Konfiguracja Addona MDblist Importer (Dynamiczna)</h1>
 
   <div id="info">
-    <p>Wklej poniżej "slugi" Twoich publicznych list z MDblist, oddzielając je przecinkami.</p>
-    <p>Slug znajdziesz w adresie URL listy, np. dla <code>https://mdblist.com/list/moje-ulubione-filmy</code> slug to <code>moje-ulubione-filmy</code>.</p>
+    <p>Wprowadź swój klucz API z MDblist.com, aby załadować swoje listy.</p>
+    <p>Następnie wybierz listy, które chcesz zaimportować do Fusion / Stremio.</p>
+    <p><strong>Ważne:</strong> Addon będzie używał Twojego klucza API tylko do pobrania nazw Twoich list na tej stronie. Do pobierania zawartości list w Fusion/Stremio używany jest inny, główny klucz API addona.</p>
   </div>
 
-  <label for="slugsInput">Wklej "slugi" list MDblist (oddzielone przecinkami):</label>
-  <textarea id="slugsInput" placeholder="np. moje-ulubione-filmy,seriale-do-obejrzenia,dokumenty-polecam,..."></textarea>
+  <label for="apiKeyInput">Twój klucz API MDblist:</label>
+  <input type="password" id="apiKeyInput" placeholder="Wklej swój klucz API tutaj">
 
-  <button onclick="generateInstallLink()">Generuj Link Instalacyjny</button>
+  <button id="loadListsBtn" onclick="loadUserLists()">Załaduj listy z API</button>
 
-  <div id="error-message"></div>
+  <div id="loading-msg" class="loading-message">Ładowanie list...</div>
+  <div id="error-msg" class="error-message"></div>
+  <div id="info-msg" class="info-message"></div>
+
+  <div id="lists-container" style="display:none;">
+    <label>Wybierz listy do zaimportowania:</label>
+    <div id="lists">
+      <!-- Checkboxy zostaną dodane tutaj przez JavaScript -->
+    </div>
+     <button onclick="generateInstallLink()">Generuj Link Instalacyjny dla wybranych list</button>
+  </div>
+
 
   <div id="install-link-container" style="display:none;">
     <label>Link instalacyjny dla Fusion / Stremio:</label>
@@ -41,54 +61,136 @@
   </div>
 
   <script>
-    // !!! WAŻNE: ZASTĄP TEN ADRES URL ADRESEM SWOJEGO WORKERA Z CLOUDFLARE PAGES (.pages.dev) !!!
-    const WORKER_URL = 'https://stremio-mdblist-importer.pages.dev'; // <<<================== TUTAJ WKLEJ SWÓJ ADRES .pages.dev!
+    // !!! WAŻNE: UPEWNIJ SIĘ, ŻE TEN ADRES URL JEST POPRAWNYM ADRESEM TWOJEGO WORKERA (.pages.dev) !!!
+    const WORKER_URL = 'https://NAZWA-PROJEKTU.pages.dev'; // <<<================== ZMIEŃ NA SWÓJ ADRES .pages.dev!
+
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const loadListsBtn = document.getElementById('loadListsBtn');
+    const listsDiv = document.getElementById('lists');
+    const listsContainer = document.getElementById('lists-container');
+    const installContainer = document.getElementById('install-link-container');
+    const installBtn = document.getElementById('installBtn');
+    const installUrlDisplay = document.getElementById('installUrlDisplay');
+    const errorMsgDiv = document.getElementById('error-msg');
+    const infoMsgDiv = document.getElementById('info-msg');
+    const loadingMsgDiv = document.getElementById('loading-msg');
+
+    function showMessage(type, text) {
+        errorMsgDiv.style.display = 'none';
+        infoMsgDiv.style.display = 'none';
+        loadingMsgDiv.style.display = 'none';
+
+        if (type === 'error') {
+            errorMsgDiv.textContent = text;
+            errorMsgDiv.style.display = 'block';
+        } else if (type === 'info') {
+            infoMsgDiv.textContent = text;
+            infoMsgDiv.style.display = 'block';
+        } else if (type === 'loading') {
+            loadingMsgDiv.textContent = text;
+            loadingMsgDiv.style.display = 'block';
+        }
+    }
+
+    async function loadUserLists() {
+        const apiKey = apiKeyInput.value.trim();
+        if (!apiKey) {
+            showMessage('error', 'Proszę wprowadzić klucz API MDblist.');
+            return;
+        }
+
+        // Sprawdzenie WORKER_URL
+        if (!WORKER_URL || WORKER_URL === 'https://NAZWA-PROJEKTU.pages.dev') {
+            showMessage('error', 'BŁĄD KRYTYCZNY: Adres URL workera (WORKER_URL) nie jest ustawiony poprawnie w kodzie HTML!');
+            return;
+        }
+
+        listsDiv.innerHTML = ''; // Wyczyść poprzednie listy
+        listsContainer.style.display = 'none';
+        installContainer.style.display = 'none';
+        showMessage('loading', 'Ładowanie list z Twojego API MDblist...');
+        loadListsBtn.disabled = true;
+        apiKeyInput.disabled = true;
+
+        try {
+            const response = await fetch(`${WORKER_URL}/api/get-user-lists`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ apiKey: apiKey }) // Wysyłamy klucz w ciele POST
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Wyświetl błąd zwrócony przez worker (np. błąd API MDblist)
+                throw new Error(data.error || `Błąd serwera (${response.status})`);
+            }
+
+            const lists = data.lists;
+            if (!lists || lists.length === 0) {
+                showMessage('info', 'Nie znaleziono żadnych list dla podanego klucza API lub listy są puste.');
+                return;
+            }
+
+            // Wypełnij div checkboxami
+            lists.forEach(list => {
+                const div = document.createElement('div');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `list_${list.slug}`;
+                checkbox.value = list.slug;
+                checkbox.name = 'mdblists';
+
+                const label = document.createElement('label');
+                label.htmlFor = checkbox.id;
+                // label.textContent = `${list.title} (${list.slug}) - ${list.item_count || 0} pozycji`;
+                 label.textContent = `${list.name || list.title} (${list.slug}) - ${list.item_count !== undefined ? list.item_count : '?'} pozycji`;
+
+
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                listsDiv.appendChild(div);
+            });
+
+            listsContainer.style.display = 'block'; // Pokaż sekcję z listami
+            showMessage('info', `Załadowano ${lists.length} list. Wybierz, które chcesz zaimportować.`);
+
+        } catch (error) {
+            console.error("Błąd podczas ładowania list:", error);
+            showMessage('error', `Nie udało się załadować list: ${error.message}\n\nSprawdź swój klucz API oraz połączenie internetowe. Upewnij się, że worker (${WORKER_URL}) działa poprawnie.`);
+        } finally {
+             loadListsBtn.disabled = false; // Włącz przycisk z powrotem
+             apiKeyInput.disabled = false;
+             // Ukryj komunikat ładowania, jeśli nie było innego komunikatu
+             if (loadingMsgDiv.style.display === 'block' && errorMsgDiv.style.display === 'none' && infoMsgDiv.style.display === 'none') {
+                 loadingMsgDiv.style.display = 'none';
+             }
+        }
+    }
 
     function generateInstallLink() {
-      const slugsInput = document.getElementById('slugsInput');
-      const slugsRaw = slugsInput.value.trim();
-      const errorDiv = document.getElementById('error-message');
-      const installContainer = document.getElementById('install-link-container');
-      const installBtn = document.getElementById('installBtn');
-      const installUrlDisplay = document.getElementById('installUrlDisplay');
+        const selectedCheckboxes = document.querySelectorAll('#lists input[name="mdblists"]:checked');
+        const selectedSlugs = Array.from(selectedCheckboxes).map(cb => cb.value);
 
-      errorDiv.style.display = 'none';
-      errorDiv.textContent = '';
-      installContainer.style.display = 'none';
+        if (selectedSlugs.length === 0) {
+            showMessage('error', 'Nie wybrałeś żadnych list do zaimportowania.');
+            installContainer.style.display = 'none';
+            return;
+        }
 
-      const slugs = slugsRaw.split(',')
-                          .map(s => s.trim())
-                          .filter(s => s.length > 0);
+        // Ukryj poprzednie komunikaty o błędach/info
+        showMessage('', ''); // Wyczyść komunikaty
 
-      if (slugs.length === 0) {
-        showError('Nie wpisałeś żadnych poprawnych slugów list. Sprawdź, czy są oddzielone przecinkami.');
-        slugsInput.focus();
-        return;
-      }
+        const encodedSlugs = encodeURIComponent(selectedSlugs.join(','));
+        const installHref = `${WORKER_URL}/manifest.json?listSlug=${encodedSlugs}`;
 
-      // Sprawdzenie, czy WORKER_URL został zmieniony
-      if (!WORKER_URL || WORKER_URL === 'https://NAZWA-PROJEKTU.pages.dev') {
-         showError('BŁĄD KRYTYCZNY: Adres URL workera (WORKER_URL) nie został ustawiony w kodzie HTML! Edytuj plik mdblist-config-ui.html i wklej poprawny adres URL z Cloudflare Pages (.pages.dev).');
-         return;
-      }
-
-      const encodedSlugs = encodeURIComponent(slugs.join(','));
-
-      // Link instalacyjny wskazuje na manifest.json NA TWOIM WORKERZE z parametrem ?listSlug=...
-      const installHref = `${WORKER_URL}/manifest.json?listSlug=${encodedSlugs}`;
-
-      installBtn.href = installHref;
-      installUrlDisplay.textContent = installHref; // Wyświetl URL
-      installContainer.style.display = 'block';
+        installBtn.href = installHref;
+        installUrlDisplay.textContent = installHref;
+        installContainer.style.display = 'block'; // Pokaż sekcję z linkiem instalacyjnym
     }
 
-    function showError(text) {
-      const errorDiv = document.getElementById('error-message');
-      errorDiv.textContent = text;
-      errorDiv.style.display = 'block';
-    }
-
-    // Usunięto funkcję toggleInstall, bo kontener jest teraz pokazywany/ukrywany bezpośrednio
   </script>
 
 </body>
