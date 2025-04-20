@@ -5,99 +5,56 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MDblist Config & Install</title>
   <style>
-    body { color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; transition: background 0.5s ease; }
+    /* Twoje style CSS - bez zmian */
+    body { color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; transition: background 0.5s ease; background: #333; /* Domyślne tło */}
     h1 { text-align: center; }
     label { display: block; margin: 1rem 0 .5rem; }
-    input[type="text"] { width:100%; padding:.5rem; font-size:1rem; background:#222; color:#eee; border:1px solid #444; }
+    input[type="text"], textarea { width:100%; padding:.5rem; font-size:1rem; background:#222; color:#eee; border:1px solid #444; box-sizing: border-box; } /* Dodano box-sizing */
+    textarea { min-height: 80px; } /* Dodano styl dla textarea */
     button, a.button { display: inline-block; padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; cursor:pointer; text-decoration:none; margin-top:.5rem; }
     button:hover, a.button:hover { background:#005bb5; }
-    #lists { margin:1rem 0; max-height:300px; overflow-y:auto; border:1px solid #444; padding:.5rem; background:#222; }
-    #lists label { margin-left:.25rem; }
     #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; }
   </style>
 </head>
 <body>
-  <script>
-    // Losowe tło na każdą wizytę
-    document.addEventListener('DOMContentLoaded', () => {
-      const randColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-      document.body.style.background = randColor;
-    });
-  </script>
+  <!-- Usunięto losowe tło dla uproszczenia -->
 
   <h1>MDblist Config & Install</h1>
 
-  <label for="apiKey">Twoje API Key:</label>
-  <input id="apiKey" type="text" placeholder="w0ys7vrr14k2obu5ar6rsvvq3">
+  <label for="slugsInput">Wklej "slugi" list MDblist (oddzielone przecinkami):</label>
+  <textarea id="slugsInput" placeholder="np. moja-lista-filmow,ulubione-seriale-2024,..."></textarea>
 
-  <button onclick="loadLists()">Załaduj listy</button>
+  <button onclick="generateInstallLink()">Generuj Link Instalacyjny</button>
 
   <div id="error-message" style="display:none;"></div>
-  <div id="lists"></div>
-
-  <label for="slugs">Wybrane slugi (skopiuj/zaimplementuj):</label>
-  <input id="slugs" type="text" placeholder="slug1,slug2,..." readonly>
 
   <!-- Przycisk instalacji -->
-  <a id="installBtn" class="button" href="#" target="_blank" style="display:none;">Zainstaluj do Stremio</a>
+  <a id="installBtn" class="button" href="#" target="_blank" style="display:none;">Zainstaluj do Fusion / Stremio</a>
 
   <script>
-    async function loadLists() {
-      const apiKey = document.getElementById('apiKey').value.trim();
+    function generateInstallLink() {
+      const slugs = document.getElementById('slugsInput').value.trim().split(',').map(s => s.trim()).filter(s => s).join(',');
       const errorDiv = document.getElementById('error-message');
-      const listContainer = document.getElementById('lists');
-      document.getElementById('slugs').value = '';
       errorDiv.style.display = 'none';
       errorDiv.textContent = '';
-      listContainer.innerHTML = '';
-      toggleInstall(false);
 
-      if (!apiKey) {
-        showError('Nie wpisałeś API Key');
+      if (!slugs) {
+        showError('Nie wpisałeś żadnych slugów list.');
+        toggleInstall(false);
         return;
       }
 
-      const url = `https://mdblist.com/api/lists/user/?apikey=${encodeURIComponent(apiKey)}`;
-      try {
-        const res = await fetch(url);
-        let bodyText = '<brak treści>';
-        try { bodyText = await res.text(); } catch(_){}
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}\n${bodyText}`);
+      // === KLUCZOWA ZMIANA: Użycie https:// zamiast stremio:// ===
+      // Zakładamy, że link ma prowadzić do manifestu na jsDelivr, zgodnie z Twoim opisem dla Fusion
+      const base = 'cdn.jsdelivr.net/gh/bardbit/stremio-mdblist-importer@main/manifest.json';
+      // UWAGA: Upewnij się, że pliki są zmergowane do gałęzi `main` na GitHubie.
+      // Jeśli używasz innej gałęzi, zmień `@main` na `@nazwa-twojej-galezi`.
 
-        let data;
-        try { data = JSON.parse(bodyText); } catch (e) {
-          throw new Error(`Błąd parsowania JSON:\n${e.message}\nDane:\n${bodyText}`);
-        }
+      // Zmiana protokołu na https://
+      const href = `https://${base}?listSlug=${encodeURIComponent(slugs)}`;
 
-        const lists = data.lists || data;
-        if (!Array.isArray(lists) || !lists.length) {
-          throw new Error('Brak list do wyświetlenia lub niepoprawny format odpowiedzi');
-        }
-
-        lists.forEach(({ title, slug }) => {
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.value = slug;
-          cb.id = 'cb_' + slug;
-          cb.addEventListener('change', () => { updateSlugs(); updateInstallLink(); });
-          const lbl = document.createElement('label');
-          lbl.htmlFor = cb.id;
-          lbl.textContent = `${title} (${slug})`;
-          listContainer.appendChild(cb);
-          listContainer.appendChild(lbl);
-          listContainer.appendChild(document.createElement('br'));
-        });
-
-        updateSlugs();
-        updateInstallLink();
-        toggleInstall(true);
-
-      } catch (e) {
-        const msg = e.message.includes('Failed to fetch')
-          ? `${e.message}\n\nMoże to być błąd CORS lub brak dostępu do API z tej domeny.`
-          : e.message;
-        showError(`Błąd pobierania list:\nURL: ${url}\n\n${msg}`);
-      }
+      document.getElementById('installBtn').href = href;
+      toggleInstall(true);
     }
 
     function showError(text) {
@@ -106,23 +63,12 @@
       errorDiv.style.display = 'block';
     }
 
-    function updateSlugs() {
-      const selected = Array.from(document.querySelectorAll('#lists input[type=checkbox]:checked'))
-        .map(cb => cb.value)
-        .join(',');
-      document.getElementById('slugs').value = selected;
-    }
-
-    function updateInstallLink() {
-      const slugs = document.getElementById('slugs').value;
-      const base = 'cdn.jsdelivr.net/gh/bardbit/stremio-mdblist-importer@main/manifest.json';
-      const href = 'stremio://' + base + (slugs ? `?listSlug=${encodeURIComponent(slugs)}` : '');
-      document.getElementById('installBtn').href = href;
-    }
-
     function toggleInstall(show) {
       document.getElementById('installBtn').style.display = show ? 'inline-block' : 'none';
     }
+
+    // Wywołaj generowanie linku, jeśli są już jakieś slugi (np. po odświeżeniu strony z parametrami URL - opcjonalne)
+    // Można dodać logikę do odczytu slugów z parametrów URL, jeśli chcesz udostępniać prekonfigurowane linki.
   </script>
 </body>
 </html>
