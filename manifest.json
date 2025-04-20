@@ -1,29 +1,74 @@
-{
-  "id": "community.mdblist.importer",
-  "version": "1.0.0",
-  "name": "MDblist Importer",
-  "description": "Import dowolne listy z MDblist.com jako katalogi w Stremio",
-  "resources": ["catalog"],
-  "types": ["movie", "series"],
-  "catalogs": [
-    {
-      "type": "movie",
-      "id": "mdblist_movies",
-      "name": "MDblist – Movie Lists",
-      "extra": [
-        { "name": "listSlug", "isRequired": true }
-      ]
-    },
-    {
-      "type": "series",
-      "id": "mdblist_series",
-      "name": "MDblist – Series Lists",
-      "extra": [
-        { "name": "listSlug", "isRequired": true }
-      ]
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MDblist Config & Install</title>
+  <style>
+    /* Twoje style CSS - bez zmian */
+    body { color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; transition: background 0.5s ease; background: #333; /* Domyślne tło */}
+    h1 { text-align: center; }
+    label { display: block; margin: 1rem 0 .5rem; }
+    input[type="text"], textarea { width:100%; padding:.5rem; font-size:1rem; background:#222; color:#eee; border:1px solid #444; box-sizing: border-box; } /* Dodano box-sizing */
+    textarea { min-height: 80px; } /* Dodano styl dla textarea */
+    button, a.button { display: inline-block; padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; cursor:pointer; text-decoration:none; margin-top:.5rem; }
+    button:hover, a.button:hover { background:#005bb5; }
+    #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; }
+  </style>
+</head>
+<body>
+  <!-- Usunięto losowe tło dla uproszczenia -->
+
+  <h1>MDblist Config & Install</h1>
+
+  <label for="slugsInput">Wklej "slugi" list MDblist (oddzielone przecinkami):</label>
+  <textarea id="slugsInput" placeholder="np. moja-lista-filmow,ulubione-seriale-2024,..."></textarea>
+
+  <button onclick="generateInstallLink()">Generuj Link Instalacyjny</button>
+
+  <div id="error-message" style="display:none;"></div>
+
+  <!-- Przycisk instalacji -->
+  <a id="installBtn" class="button" href="#" target="_blank" style="display:none;">Zainstaluj do Fusion / Stremio</a>
+
+  <script>
+    function generateInstallLink() {
+      const slugs = document.getElementById('slugsInput').value.trim().split(',').map(s => s.trim()).filter(s => s).join(',');
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.style.display = 'none';
+      errorDiv.textContent = '';
+
+      if (!slugs) {
+        showError('Nie wpisałeś żadnych slugów list.');
+        toggleInstall(false);
+        return;
+      }
+
+      // === KLUCZOWA ZMIANA: Użycie https:// zamiast stremio:// ===
+      // Zakładamy, że link ma prowadzić do manifestu na jsDelivr, zgodnie z Twoim opisem dla Fusion
+      const base = 'cdn.jsdelivr.net/gh/bardbit/stremio-mdblist-importer@main/manifest.json';
+      // UWAGA: Upewnij się, że pliki są zmergowane do gałęzi `main` na GitHubie.
+      // Jeśli używasz innej gałęzi, zmień `@main` na `@nazwa-twojej-galezi`.
+
+      // Zmiana protokołu na https://
+      const href = `https://${base}?listSlug=${encodeURIComponent(slugs)}`;
+
+      document.getElementById('installBtn').href = href;
+      toggleInstall(true);
     }
-  ],
-  "behaviorHints": {
-    "configurationRequired": true
-  }
-}
+
+    function showError(text) {
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.textContent = text;
+      errorDiv.style.display = 'block';
+    }
+
+    function toggleInstall(show) {
+      document.getElementById('installBtn').style.display = show ? 'inline-block' : 'none';
+    }
+
+    // Wywołaj generowanie linku, jeśli są już jakieś slugi (np. po odświeżeniu strony z parametrami URL - opcjonalne)
+    // Można dodać logikę do odczytu slugów z parametrów URL, jeśli chcesz udostępniać prekonfigurowane linki.
+  </script>
+</body>
+</html>
