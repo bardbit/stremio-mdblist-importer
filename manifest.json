@@ -10,13 +10,17 @@
       "type": "movie",
       "id": "mdblist_movies",
       "name": "MDblist – Movie Lists",
-      "extra": [{ "name": "listSlug", "isRequired": true }]
+      "extra": [
+        { "name": "listSlug", "isRequired": true }
+      ]
     },
     {
       "type": "series",
       "id": "mdblist_series",
       "name": "MDblist – Series Lists",
-      "extra": [{ "name": "listSlug", "isRequired": true }]
+      "extra": [
+        { "name": "listSlug", "isRequired": true }
+      ]
     }
   ],
   "behaviorHints": {
