@@ -3,58 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MDblist Config & Install</title>
+  <title>MDblist Importer - Konfiguracja (Git Deploy)</title> <!-- Zmieniony tytuł -->
   <style>
-    /* Twoje style CSS - bez zmian */
-    body { color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; transition: background 0.5s ease; background: #333; /* Domyślne tło */}
+    body { color: #eee; font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; background: #333; }
     h1 { text-align: center; }
-    label { display: block; margin: 1rem 0 .5rem; }
-    input[type="text"], textarea { width:100%; padding:.5rem; font-size:1rem; background:#222; color:#eee; border:1px solid #444; box-sizing: border-box; } /* Dodano box-sizing */
-    textarea { min-height: 80px; } /* Dodano styl dla textarea */
-    button, a.button { display: inline-block; padding:.5rem 1rem; font-size:1rem; background:#0066cc; color:#fff; border:none; cursor:pointer; text-decoration:none; margin-top:.5rem; }
-    button:hover, a.button:hover { background:#005bb5; }
-    #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; }
+    label { display: block; margin: 1rem 0 .5rem; font-weight: bold; }
+    textarea { width: 100%; min-height: 80px; padding: .5rem; font-size: 1rem; background: #222; color: #eee; border: 1px solid #444; box-sizing: border-box; font-family: monospace; }
+    button, a.button { display: inline-block; padding: .7rem 1.2rem; font-size: 1rem; background: #0066cc; color: #fff; border: none; cursor: pointer; text-decoration: none; margin-top: 1rem; border-radius: 4px; }
+    button:hover, a.button:hover { background: #005bb5; }
+    #install-link-container { margin-top: 1.5rem; }
+    #error-message { background:#330000; color:#f88; padding:1rem; margin:1rem 0; border:1px solid #f44; white-space:pre-wrap; display: none; }
+    #info { background: #222; border: 1px solid #444; padding: 1rem; margin-top: 1rem; font-size: 0.9em; }
+    code { background: #444; padding: 0.2em 0.4em; border-radius: 3px; }
   </style>
 </head>
 <body>
-  <!-- Usunięto losowe tło dla uproszczenia -->
 
-  <h1>MDblist Config & Install</h1>
+  <h1>Konfiguracja Addona MDblist Importer (Git Deploy)</h1> <!-- Zmieniony tytuł -->
+
+  <div id="info">
+    <p>Wklej poniżej "slugi" Twoich publicznych list z MDblist, oddzielając je przecinkami.</p>
+    <p>Slug znajdziesz w adresie URL listy, np. dla <code>https://mdblist.com/list/moje-ulubione-filmy</code> slug to <code>moje-ulubione-filmy</code>.</p>
+  </div>
 
   <label for="slugsInput">Wklej "slugi" list MDblist (oddzielone przecinkami):</label>
-  <textarea id="slugsInput" placeholder="np. moja-lista-filmow,ulubione-seriale-2024,..."></textarea>
+  <textarea id="slugsInput" placeholder="np. moje-ulubione-filmy,seriale-do-obejrzenia,dokumenty-polecam,..."></textarea>
 
   <button onclick="generateInstallLink()">Generuj Link Instalacyjny</button>
 
-  <div id="error-message" style="display:none;"></div>
+  <div id="error-message"></div>
 
-  <!-- Przycisk instalacji -->
-  <a id="installBtn" class="button" href="#" target="_blank" style="display:none;">Zainstaluj do Fusion / Stremio</a>
+  <div id="install-link-container" style="display:none;">
+    <label>Link instalacyjny dla Fusion / Stremio:</label>
+    <a id="installBtn" class="button" href="#" target="_blank">Zainstaluj Addon</a>
+    <p>Kliknij przycisk powyżej lub skopiuj jego adres URL i wklej ręcznie w Fusion/Stremio.</p>
+    <p style="font-size: 0.8em; word-wrap: break-word;">URL: <code id="installUrlDisplay"></code></p>
+  </div>
 
   <script>
+    // !!! WAŻNE: ZASTĄP TEN ADRES URL ADRESEM SWOJEGO WORKERA Z CLOUDFLARE PAGES (.pages.dev) !!!
+    const WORKER_URL = 'https://stremio-mdblist-importer.pages.dev'; // <<<================== TUTAJ WKLEJ SWÓJ ADRES .pages.dev!
+
     function generateInstallLink() {
-      const slugs = document.getElementById('slugsInput').value.trim().split(',').map(s => s.trim()).filter(s => s).join(',');
+      const slugsInput = document.getElementById('slugsInput');
+      const slugsRaw = slugsInput.value.trim();
       const errorDiv = document.getElementById('error-message');
+      const installContainer = document.getElementById('install-link-container');
+      const installBtn = document.getElementById('installBtn');
+      const installUrlDisplay = document.getElementById('installUrlDisplay');
+
       errorDiv.style.display = 'none';
       errorDiv.textContent = '';
+      installContainer.style.display = 'none';
 
-      if (!slugs) {
-        showError('Nie wpisałeś żadnych slugów list.');
-        toggleInstall(false);
+      const slugs = slugsRaw.split(',')
+                          .map(s => s.trim())
+                          .filter(s => s.length > 0);
+
+      if (slugs.length === 0) {
+        showError('Nie wpisałeś żadnych poprawnych slugów list. Sprawdź, czy są oddzielone przecinkami.');
+        slugsInput.focus();
         return;
       }
 
-      // === KLUCZOWA ZMIANA: Użycie https:// zamiast stremio:// ===
-      // Zakładamy, że link ma prowadzić do manifestu na jsDelivr, zgodnie z Twoim opisem dla Fusion
-      const base = 'cdn.jsdelivr.net/gh/bardbit/stremio-mdblist-importer@main/manifest.json';
-      // UWAGA: Upewnij się, że pliki są zmergowane do gałęzi `main` na GitHubie.
-      // Jeśli używasz innej gałęzi, zmień `@main` na `@nazwa-twojej-galezi`.
+      // Sprawdzenie, czy WORKER_URL został zmieniony
+      if (!WORKER_URL || WORKER_URL === 'https://NAZWA-PROJEKTU.pages.dev') {
+         showError('BŁĄD KRYTYCZNY: Adres URL workera (WORKER_URL) nie został ustawiony w kodzie HTML! Edytuj plik mdblist-config-ui.html i wklej poprawny adres URL z Cloudflare Pages (.pages.dev).');
+         return;
+      }
 
-      // Zmiana protokołu na https://
-      const href = `https://${base}?listSlug=${encodeURIComponent(slugs)}`;
+      const encodedSlugs = encodeURIComponent(slugs.join(','));
 
-      document.getElementById('installBtn').href = href;
-      toggleInstall(true);
+      // Link instalacyjny wskazuje na manifest.json NA TWOIM WORKERZE z parametrem ?listSlug=...
+      const installHref = `${WORKER_URL}/manifest.json?listSlug=${encodedSlugs}`;
+
+      installBtn.href = installHref;
+      installUrlDisplay.textContent = installHref; // Wyświetl URL
+      installContainer.style.display = 'block';
     }
 
     function showError(text) {
@@ -63,12 +88,8 @@
       errorDiv.style.display = 'block';
     }
 
-    function toggleInstall(show) {
-      document.getElementById('installBtn').style.display = show ? 'inline-block' : 'none';
-    }
-
-    // Wywołaj generowanie linku, jeśli są już jakieś slugi (np. po odświeżeniu strony z parametrami URL - opcjonalne)
-    // Można dodać logikę do odczytu slugów z parametrów URL, jeśli chcesz udostępniać prekonfigurowane linki.
+    // Usunięto funkcję toggleInstall, bo kontener jest teraz pokazywany/ukrywany bezpośrednio
   </script>
+
 </body>
 </html>
